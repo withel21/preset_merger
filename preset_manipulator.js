@@ -4,13 +4,13 @@ const fs = require("fs");
 function readPresetDirs(rootDir, cb) {
   const presetNames = [];
   try {
-    fs.readdir(rootDir, (err, dir) => {
+    fs.readdir(rootDir, {withFileTypes: true}, (err, dir) => {
       if(err) {
         cb(err, null);
         return;
       }
       for (const dirent of dir) {
-        presetNames.push( dirent);
+        if(dirent.isDirectory()) { presetNames.push( dirent.name); }
       }
       cb(null, presetNames);
     });    
@@ -90,6 +90,7 @@ function GeneratePreset(newPresetName, sourceCams, presetInfos, presetRootPath, 
       cb(null, "preset path created - '" + tgtPresetPath + "'", false);
     }
     
+    let onCopyingCount = 0;
     for(const pname of presetNames) {
       const srcPresetPath = path.join(presetRootPath, pname)
       sourceCams[pname].sort();
@@ -101,9 +102,10 @@ function GeneratePreset(newPresetName, sourceCams, presetInfos, presetRootPath, 
 
             if( sourceCams[pname].includes(camId)) {
               cb(null, "copying '" + dirent + "' from '" + srcPresetPath + "' to '" + tgtPresetPath + "'...", false);
-
+              onCopyingCount++;
               fs.copyFile(path.join(srcPresetPath, dirent), path.join(tgtPresetPath, dirent), () => {
                 cb(null, "copied '" + dirent + "' from '" + srcPresetPath + "' to '" + tgtPresetPath + "'!", false);
+                onCopyingCount--;
               });
             }
           }
@@ -133,7 +135,16 @@ function GeneratePreset(newPresetName, sourceCams, presetInfos, presetRootPath, 
     cb(null, "Writing adj info for preset '" + newPresetName + "'...", false);
     fs.writeFileSync( path.join(tgtPresetPath, "UserPointData.adj"), JSON.stringify(presetInfos[newPresetName].adj, null, 2));
 
-    cb(null, "complete '" + newPresetName + "'", true);
+    const checkCopying = () => {
+      if(onCopyingCount === 0) {
+        cb(null, "complete making preset '" + newPresetName + "'", true);
+        return;
+      }
+      
+      setTimeout(checkCopying, 10);
+    };
+
+    setTimeout(checkCopying, 10);
 
   } catch(error) {
     cb(error, "", false);

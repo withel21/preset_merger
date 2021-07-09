@@ -33,7 +33,7 @@ function PresetNameLoad() {
       });
     });
   } catch(err) {
-    console.log("fail to get preset names!" + err);
+    term.error("fail to get preset names!" + err);
     return [];
   }
 }
@@ -111,7 +111,7 @@ function ChooseSourcePresets(presetName) {
       if(preset !== undefined) {
         sourceSelectedCams = {};
         
-        term.saveCursor(preset+"-cam-select");
+        term.saveCursor();
         
         sourceSelectedCams[preset] = [];
         GetCamerasFromSourcePresets(preset, presetGen);
@@ -159,7 +159,7 @@ function* GeneratePresetName() {
 }
 
 function GetCamerasFromSourcePresets(preset, presetGen) {
-  term.restoreCursor(preset+"-cam-select");
+  term.restoreCursor();
     
   term.bgGreen("\nChoose Cameras on preset - [" + preset + "]\n");
   term.green("    arrow key: Navigate, ENTER: select/deselect, other keys: setting complete \n");
@@ -169,7 +169,7 @@ function GetCamerasFromSourcePresets(preset, presetGen) {
       if( nextPreset === undefined) {
         MakePreset();
       } else {
-        term.saveCursor(nextPreset+"-cam-select");
+        term.saveCursor();
         sourceSelectedCams[nextPreset] = [];
         GetCamerasFromSourcePresets(nextPreset, presetGen);
       }
@@ -191,19 +191,17 @@ function GetCamerasFromSourcePresets(preset, presetGen) {
 }
 
 function MakePreset() {
-  term.saveCursor(targetPresetName+"-make-cursor");
   presetMan.GeneratePreset(targetPresetName, sourceSelectedCams, presetInfos, presetRootPath, (error, msg, done) => {
     if( error) {
-      console.log(error);
+      term.error(error);
       return;
     }
-    term.restoreCursor(targetPresetName+"-make-cursor");
     if( done) {
-      term.bgGreen("DONE : " + msg);
+      term.bgGreen("DONE : " + msg + "\n").green("\n");
       targetPresetName = "";
       ShowMakeMenu();
     } else {
-      term.green(msg);
+      term.green(msg + "\n");
     }
   });
 }
