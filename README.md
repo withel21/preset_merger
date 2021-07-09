@@ -8,4 +8,4 @@
   * Execute 'npm i' to install the requisite components(need internet connection)
 - Execution
   * On terminal, execute 'npm start'.
-  * Follow the input guide
+  * Follow the guide on terminal
