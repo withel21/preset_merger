@@ -91,43 +91,31 @@ function ChooseSourcePresets(presetName) {
   ShowPresetList();
   term.bgGreen.black("\nMAKE '" + presetName + "' preset\n");
   term.green("\nChoose source presets: \n");
-  term.green("    arrow key: Navigate, ENTER: select/deselect, other keys: setting complete \n");
   
   const presets = [];
   
   for(const pname in presetInfos) {
     if(sourcePresets.includes(pname)) {
-      presets.push("[V] " + pname);
+      presets.push({name: pname, status: "V"});
     } else {
-      presets.push("[ ] " + pname);
+      presets.push({name: pname, status: " "});
     }
   }
   
-  term.gridMenu(presets, { exitOnUnexpectedKey: true}, (error, res) => {
-    if(res.unexpectedKey) {
-      const presetGen = GeneratePresetName();
-      const preset = presetGen.next().value;
+  gridMenu(presets, (error, res) => {
+    sourcePresets = res.filter(menu => menu.status === "V").map(menu => menu.name);
 
-      if(preset !== undefined) {
-        sourceSelectedCams = {};
+    const presetGen = GeneratePresetName();
+    const preset = presetGen.next().value;
+
+    if(preset !== undefined) {
+      sourceSelectedCams = {};
         
-        term.saveCursor();
+      term.saveCursor();
         
-        sourceSelectedCams[preset] = [];
-        GetCamerasFromSourcePresets(preset, presetGen);
-      }
-      return;
+      sourceSelectedCams[preset] = [];
+      GetCamerasFromSourcePresets(preset, presetGen);
     }
-
-    const selectedPresetName = res.selectedText.substr(4);
-    
-    if(sourcePresets.includes(selectedPresetName)) {
-      sourcePresets = sourcePresets.filter(preset => preset !== selectedPresetName);
-    } else {
-      sourcePresets.push(selectedPresetName);
-    }
-
-    ChooseSourcePresets(presetName);
   });
 }
 
@@ -152,6 +140,27 @@ function ConstructCamList(preset) {
   return camLists;
 }
 
+function ConstructCamListA(preset) {
+  const camLists = [];
+
+  for(dsc of presetInfos[preset].dscs) {
+    let selectStatus = " ";
+    for(otherPreset of sourcePresets) {
+      if(otherPreset !== preset) {
+        if( sourceSelectedCams.hasOwnProperty(otherPreset) && sourceSelectedCams[otherPreset].includes(dsc)) {
+          selectStatus = "X";
+        }
+      } else {
+        if( sourceSelectedCams[preset].includes(dsc)) {
+          selectStatus = "V";
+        }
+      }
+    }
+    camLists.push( {name: dsc, status: selectStatus} );
+  }
+  return camLists;
+}
+
 function* GeneratePresetName() {
   for(preset of sourcePresets) {
     yield preset;
@@ -159,34 +168,23 @@ function* GeneratePresetName() {
 }
 
 function GetCamerasFromSourcePresets(preset, presetGen) {
-  term.restoreCursor();
-    
   term.bgGreen("\nChoose Cameras on preset - [" + preset + "]\n");
-  term.green("    arrow key: Navigate, ENTER: select/deselect, other keys: setting complete \n");
-  term.gridMenu(ConstructCamList(preset), { exitOnUnexpectedKey: true}, (error, res) => {
-    if(res.unexpectedKey) {
-      const nextPreset = presetGen.next().value;
-      if( nextPreset === undefined) {
-        MakePreset();
-      } else {
-        term.saveCursor();
-        sourceSelectedCams[nextPreset] = [];
-        GetCamerasFromSourcePresets(nextPreset, presetGen);
-      }
+  gridMenu(ConstructCamListA(preset), (error, res) => {
+    if(error) {
+      term.error(error);
       return;
     }
-    
-    if( res.selectedText[1] !== "X") {
-      const selectedCam = res.selectedText.substr(4);
-      
-      if(sourceSelectedCams[preset].includes(selectedCam)) {
-        sourceSelectedCams[preset] = sourceSelectedCams[preset].filter(cam => cam !== selectedCam);
-      } else {
-        sourceSelectedCams[preset].push(selectedCam);
-      }
-    }
 
-    GetCamerasFromSourcePresets(preset, presetGen);
+    sourceSelectedCams[preset] = res.filter(menu => menu.status === "V").map(menu => menu.name);
+    
+    const nextPreset = presetGen.next().value;
+    if( nextPreset === undefined) {
+      term("\n\n");
+      MakePreset();
+    } else {
+      sourceSelectedCams[nextPreset] = [];
+      GetCamerasFromSourcePresets(nextPreset, presetGen);
+    }
   });
 }
 
@@ -206,7 +204,6 @@ function MakePreset() {
   });
 }
 
-
 term.on('key', (name, matched, data)=> {
   if( name === "CTRL_C") {
     term.nextLine(1);
@@ -215,3 +212,94 @@ term.on('key', (name, matched, data)=> {
 });
 
 PresetNameLoad();
+
+// Helper Module
+let gridMenuMode = false;
+function gridMenu(menuItems, cb) {
+  const maxLen = Math.max.apply(null, menuItems.map(menu => menu.name.length)) + 4;
+  const tabLen = (maxLen + 4 > 10) ? maxLen + 4: 10;
+  
+  term.green("\tarrow key: Navigate, ENTER: select/deselect, ESC: setting complete\n");
+  term.getCursorLocation((error, x, y) => {
+    if(!error) {
+      const startX = x;
+      const startY = y;
+      let endY = y;
+      let curX = x;
+      let curY = y;
+      
+      for(const menu of menuItems) {
+        const menuItem = "[" + menu.status + "] " + menu.name;
+        menu.x = curX;
+        menu.y = curY;
+        
+        term.moveTo(curX, curY);
+
+        if(menu.status === "V") {
+          term.inverse(menuItem);
+        } else if(menu.status === "X") {
+          term.gray(menuItem);
+        } else {
+          term(menuItem);
+        }
+
+        curX += tabLen;
+        if(curX + tabLen >= term.width) {
+          curX = 1;
+          curY += 1;
+        }
+      }
+      endY = curY;
+
+      term.moveTo(startX, startY);
+      curX = startX;
+      curY = startY;
+
+      gridMenuMode = true;
+      term.on('key', (name, matched, data) => {
+        if( gridMenuMode && curX != -1 && curY != -1) {
+          switch(name) {
+            case "LEFT":
+              if(curX >= tabLen) curX -= tabLen;
+              break;
+            case "RIGHT":
+              if(curX + tabLen <= term.width - tabLen) curX += tabLen;
+              break;
+            case "UP":
+              if(curY > startY) curY -= 1;
+              break;
+            case "DOWN":
+              if(curY < endY) curY += 1;
+              break;
+            case "ENTER":
+              const curMenu = menuItems.filter((menu) => menu.x === curX && menu.y === curY);
+              if(curMenu && curMenu[0] && curMenu[0].status !== "X") {
+                const menu = curMenu[0];
+                menu.status = (menu.status === "V") ? " " : "V";
+                const menuItem = "[" + menu.status + "] " + menu.name;
+                if(menu.status === "V") {
+                  term.inverse(menuItem);
+                } else if(menu.status === "X") {
+                  term.gray(menuItem);
+                } else {
+                  term(menuItem);
+                }
+              }
+              break;
+            case "ESCAPE":
+              curX = 1;
+              curY = endY + 1;
+              term.moveTo(curX, curY);
+              curX = -1;
+              curY = -1;
+              gridMenuMode = false;
+              cb(null, menuItems);
+              return;
+          }
+          term.moveTo(curX, curY);
+        }
+      });
+
+    }
+  });
+}
